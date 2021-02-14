@@ -70,6 +70,8 @@ enum sip_methods {
     SIP_METHOD_BYE,
     SIP_METHOD_ACK,
     SIP_METHOD_PRACK,
+    
+    MRCP_REQUEST_SPEAK =1000,
 };
 
 //! Return values for sip_validate_packet
@@ -161,6 +163,10 @@ struct sip_call_list {
     regex_t reg_body;
     regex_t reg_reason;
     regex_t reg_warning;
+
+    regex_t reg_mrcp_request;
+    regex_t reg_mrcp_response;
+    regex_t reg_mrcp_event;
 };
 
 /**

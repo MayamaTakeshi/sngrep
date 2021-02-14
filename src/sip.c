@@ -63,6 +63,7 @@ sip_code_t sip_codes[] = {
     { SIP_METHOD_INFO,      "INFO" },
     { SIP_METHOD_REFER,     "REFER" },
     { SIP_METHOD_UPDATE,    "UPDATE" },
+    { MRCP_REQUEST_SPEAK,   "SPEAK" },
     { 100, "100 Trying" },
     { 180, "180 Ringing" },
     { 181, "181 Call is Being Forwarded" },
@@ -172,7 +173,9 @@ sip_init(int limit, int only_calls, int no_incomplete)
     // Initialize payload parsing regexp
     match_flags = REG_EXTENDED | REG_ICASE | REG_NEWLINE;
     regcomp(&calls.reg_method, "^([a-zA-Z]+) [a-zA-Z]+:.* SIP/2.0[ ]*\r", match_flags & ~REG_NEWLINE);
-    regcomp(&calls.reg_callid, "^(Call-ID|i):[ ]*([^ ]+)[ ]*\r$", match_flags);
+    regcomp(&calls.reg_callid, "^(Call-ID|channel-identifier|i):[ ]*([^ ]+)[ ]*\r$", match_flags);
+    regcomp(&calls.reg_mrcp_request, "^MRCP/2.0 [0-9]+ ([a-zA-Z-]+) ([0-9]+)\r", match_flags & ~REG_NEWLINE);
+
     setting = setting_get_value(SETTING_SIP_HEADER_X_CID);
     reg_rule_len = strlen(setting) + 22;
     if (reg_rule_len >= SIP_ATTR_MAXLEN) {
@@ -202,6 +205,8 @@ sip_init(int limit, int only_calls, int no_incomplete)
     regcomp(&calls.reg_reason, "Reason:[ ]*[^\r]*;text=\"([^\r]+)\"", match_flags);
     regcomp(&calls.reg_warning, "Warning:[ ]*([0-9]*)", match_flags);
 
+    regcomp(&calls.reg_mrcp_response, "^MRCP/2.0 [0-9]+ [0-9]+ (([0-9]{3}) [^\r]*)\r", match_flags & ~REG_NEWLINE);
+    regcomp(&calls.reg_mrcp_event, "^MRCP/2.0 [0-9]+ ([a-zA-Z-]+) ([0-9]+) [a-zA-Z-]+\r", match_flags & ~REG_NEWLINE);
 }
 
 void
@@ -373,11 +378,15 @@ sip_check_packet(packet_t *packet)
 
         // Only create a new call if the first msg
         // is a request message in the following gorup
+        // TAKESHI: TEMPORARY CHANGE to let MRCP message go thru
+        /*
         if (calls.ignore_incomplete && msg->reqresp > SIP_METHOD_MESSAGE)
             goto skip_message;
-
+        */
+        
         // Get the Call-ID of this message
         sip_get_xcallid((const char*) payload, xcallid);
+
 
         // Rotate call list if limit has been reached
         if (calls.limit == sip_calls_count())
@@ -386,6 +395,7 @@ sip_check_packet(packet_t *packet)
         // Create the call if not found
         if (!(call = call_create(callid, xcallid)))
             goto skip_message;
+
 
         // Add this Call-Id to hash table
         htable_insert(calls.callids, call->callid, call);
@@ -537,6 +547,8 @@ sip_get_msg_reqresp(sip_msg_t *msg, const u_char *payload)
     memset(resp_str, 0, sizeof(resp_str));
     memset(reqresp, 0, sizeof(reqresp));
 
+    msg->cseq = 0;
+
     // If not already parsed
     if (!msg->reqresp) {
 
@@ -547,17 +559,46 @@ sip_get_msg_reqresp(sip_msg_t *msg, const u_char *payload)
             } else {
                 sprintf(reqresp, "%.*s", (int) (pmatch[1].rm_eo - pmatch[1].rm_so), payload + pmatch[1].rm_so);
             }
+        } else if(regexec(&calls.reg_mrcp_request, (const char *)payload, 3, pmatch, 0) == 0) {
+            // MRCP // request and cseq
+            if ((int)(pmatch[1].rm_eo - pmatch[1].rm_so) >= SIP_ATTR_MAXLEN) {
+                strncpy(reqresp, "<malformed>", 11);
+            } else {
+                sprintf(reqresp, "%.*s", (int) (pmatch[1].rm_eo - pmatch[1].rm_so), payload + pmatch[1].rm_so);
+            }
+            sprintf(cseq, "%.*s", (int)(pmatch[2].rm_eo - pmatch[2].rm_so), payload + pmatch[2].rm_so);
+            msg->cseq = atoi(cseq);
+        } else if (regexec(&calls.reg_mrcp_event, (const char *)payload, 3, pmatch, 0) == 0) {
+        // MRCP Event
+            if ((int)(pmatch[1].rm_eo - pmatch[1].rm_so) >= SIP_ATTR_MAXLEN) {
+                strncpy(reqresp, "<malformed>", 11);
+            } else {
+                sprintf(reqresp, "%.*s", (int) (pmatch[1].rm_eo - pmatch[1].rm_so), payload + pmatch[1].rm_so);
+            }
+            sprintf(cseq, "%.*s", (int)(pmatch[2].rm_eo - pmatch[2].rm_so), payload + pmatch[2].rm_so);
+            msg->cseq = atoi(cseq);
         }
 
         // CSeq
-        if (regexec(&calls.reg_cseq, (char*)payload, 2, pmatch, 0) == 0) {
+        if (!msg->cseq && regexec(&calls.reg_cseq, (char*)payload, 2, pmatch, 0) == 0) {
             sprintf(cseq, "%.*s", (int)(pmatch[1].rm_eo - pmatch[1].rm_so), payload + pmatch[1].rm_so);
             msg->cseq = atoi(cseq);
         }
 
-
         // Response code
         if (regexec(&calls.reg_response, (const char *)payload, 3, pmatch, 0) == 0) {
+            if ((int)(pmatch[1].rm_eo - pmatch[1].rm_so) >= SIP_ATTR_MAXLEN) {
+                strncpy(resp_str, "<malformed>", 11);
+            } else {
+                sprintf(resp_str, "%.*s", (int) (pmatch[1].rm_eo - pmatch[1].rm_so), payload + pmatch[1].rm_so);
+            }
+            if ((int)(pmatch[2].rm_eo - pmatch[2].rm_so) >= SIP_ATTR_MAXLEN) {
+                strncpy(resp_str, "<malformed>", 11);
+            } else {
+                sprintf(reqresp, "%.*s", (int) (pmatch[2].rm_eo - pmatch[2].rm_so), payload + pmatch[2].rm_so);
+            }
+        } else if (regexec(&calls.reg_mrcp_response, (const char *)payload, 3, pmatch, 0) == 0) {
+        // MRCP Response code
             if ((int)(pmatch[1].rm_eo - pmatch[1].rm_so) >= SIP_ATTR_MAXLEN) {
                 strncpy(resp_str, "<malformed>", 11);
             } else {

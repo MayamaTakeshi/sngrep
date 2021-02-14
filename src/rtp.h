@@ -307,6 +307,9 @@ rtp_stream_t *
 rtp_find_rtcp_stream(address_t src, address_t dst);
 
 rtp_stream_t *
+rtp_find_mrcp_stream(address_t src, address_t dst);
+
+rtp_stream_t *
 rtp_find_call_stream(struct sip_call *call, address_t src, address_t dst);
 
 rtp_stream_t *
@@ -353,5 +356,12 @@ data_is_rtp(u_char *data, uint32_t len);
  */
 int
 data_is_rtcp(u_char *data, uint32_t len);
+
+/**
+ * @brief Check if the data is a MRCP packet
+ */
+int
+data_is_mrcp(u_char *data, uint32_t len);
+
 
 #endif /* __SNGREP_RTP_H */

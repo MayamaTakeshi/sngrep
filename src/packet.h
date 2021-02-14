@@ -51,6 +51,7 @@ enum packet_type {
     PACKET_SIP_WSS,
     PACKET_RTP,
     PACKET_RTCP,
+    PACKET_MRCP,
 };
 
 //! Shorter declaration of packet structure

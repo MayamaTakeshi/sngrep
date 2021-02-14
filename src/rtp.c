@@ -321,6 +321,15 @@ rtp_check_packet(packet_t *packet)
             stream_complete(stream, src);
             stream_add_packet(stream, packet);
         }
+    } else if (data_is_mrcp(payload, size) == 0) {
+        // Find the matching stream
+        if ((stream = rtp_find_mrcp_stream(src, dst))) {
+            printf("found MRCP\n");
+            exit(1);
+            // Add packet to stream
+            stream_complete(stream, src);
+            stream_add_packet(stream, packet);
+        }
     } else {
       return NULL;
     }
@@ -404,6 +413,32 @@ rtp_find_rtcp_stream(address_t src, address_t dst)
     return NULL;
 }
 
+
+rtp_stream_t *
+rtp_find_mrcp_stream(address_t src, address_t dst)
+{
+    // Structure for RTP packet streams
+    rtp_stream_t *stream;
+    // Check if this is a RTP packet from active calls
+    sip_call_t *call;
+    // Iterator for active calls
+    vector_iter_t calls;
+
+    // Get active calls (during conversation)
+    calls = sip_calls_iterator();
+    vector_iterator_set_current(&calls, vector_iterator_count(&calls));
+
+    while ((call = vector_iterator_prev(&calls))) {
+        // Check if this call has an RTP stream for current packet data
+        if ((stream = rtp_find_call_stream(call, src, dst))) {
+            if (stream->type != PACKET_MRCP)
+                continue;
+            return stream;
+        }
+    }
+
+    return NULL;
+}
 
 rtp_stream_t *
 rtp_find_call_stream(struct sip_call *call, address_t src, address_t dst)
@@ -514,5 +549,16 @@ data_is_rtcp(u_char *data, uint32_t len)
     }
 
     // Not a RTCP packet
+    return 1;
+}
+
+int
+data_is_mrcp(u_char *data, uint32_t len)
+{
+    if (strncmp(data, "MRCP/2.0 ", 9)) {
+        return 0;
+    }
+
+    // Not a MRCP packet
     return 1;
 }

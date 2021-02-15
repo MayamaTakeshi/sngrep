@@ -129,6 +129,8 @@ struct sip_call_list {
     int last_index;
     //! Call-Ids hash table
     htable_t *callids;
+    //! MRCP channeld-identifier hash table
+    htable_t *mrcp_channelids;
 
     // Max call limit
     int limit;
@@ -161,6 +163,8 @@ struct sip_call_list {
     regex_t reg_body;
     regex_t reg_reason;
     regex_t reg_warning;
+
+    regex_t reg_mrcp_channelid;
 };
 
 /**
@@ -202,6 +206,12 @@ sip_get_callid(const char* payload, char *callid);
  */
 char *
 sip_get_xcallid(const char* payload, char *xcallid);
+
+/**
+ * @brief Extract channel-identifier from MRCP packet
+ */ 
+char *
+sip_get_mrcp_channelid(const char* payload, char *channelid);
 
 /**
  * @brief Validate the packet payload is a SIP message
@@ -493,5 +503,11 @@ sip_sort_list();
 
 void
 sip_list_sorter(vector_t *vector, void *item);
+
+rtp_stream_t *
+sip_find_mrcp_stream(struct sip_call *call, char *channelid);
+
+sip_call_t *
+sip_find_by_mrcp_channelid(const char *channelid);
 
 #endif

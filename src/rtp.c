@@ -156,6 +156,7 @@ rtp_get_standard_format(uint32_t code)
     return NULL;
 }
 
+
 rtp_stream_t *
 rtp_check_packet(packet_t *packet)
 {
@@ -172,6 +173,10 @@ rtp_check_packet(packet_t *packet)
     struct rtcp_blk_xr blk_xr;
     struct rtcp_blk_xr_voip blk_xr_voip;
 
+    char *callid;
+    char channelid[1024];
+    sip_call_t *call;
+
     // Get packet data
     payload = packet_payload(packet);
     size = packet_payloadlen(packet);
@@ -180,7 +185,20 @@ rtp_check_packet(packet_t *packet)
     src = packet->src;
     dst = packet->dst;
 
-    if (data_is_rtp(payload, size) == 0) {
+    if (strncmp(payload, "MRCP/2.0 ", 9) == 0) {
+        if (!sip_get_mrcp_channelid((const char*) payload, channelid))
+            return NULL;
+
+        if (!(call = sip_find_by_mrcp_channelid(channelid)))
+            return NULL;
+
+        stream = sip_find_mrcp_stream(call, channelid);
+
+        if(!stream) 
+            return NULL;
+ 
+        stream_add_packet(stream, packet);
+    } else if (data_is_rtp(payload, size) == 0) {
 
         // Get RTP payload type
         format = RTP_PAYLOAD_TYPE(*(payload + 1));

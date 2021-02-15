@@ -50,6 +50,9 @@
 // RTCP common header length
 #define RTCP_HDR_LENGTH 4
 
+// MRCP channel-identifier max length
+#define MRCP_CHANNEL_ID_LENGTH 64
+
 // If stream does not receive a packet in this seconds, we consider it inactive
 #define STREAM_INACTIVE_SECS 3
 
@@ -132,6 +135,9 @@ struct rtp_stream {
             //! MOS - Conversational Quality
             uint8_t mosc;
         } rtcpinfo;
+        struct {
+            char channelid[MRCP_CHANNEL_ID_LENGTH];
+        } mrcpinfo;
     };
 };
 
@@ -304,6 +310,9 @@ rtp_stream_t *
 rtp_find_stream_format(address_t src, address_t dst, uint32_t format);
 
 rtp_stream_t *
+rtp_find_mrcp_stream(char *channelid);
+
+rtp_stream_t *
 rtp_find_rtcp_stream(address_t src, address_t dst);
 
 rtp_stream_t *
@@ -353,5 +362,6 @@ data_is_rtp(u_char *data, uint32_t len);
  */
 int
 data_is_rtcp(u_char *data, uint32_t len);
+
 
 #endif /* __SNGREP_RTP_H */

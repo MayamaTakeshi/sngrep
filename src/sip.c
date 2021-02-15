@@ -63,6 +63,37 @@ sip_code_t sip_codes[] = {
     { SIP_METHOD_INFO,      "INFO" },
     { SIP_METHOD_REFER,     "REFER" },
     { SIP_METHOD_UPDATE,    "UPDATE" },
+
+    { SIP_METHOD_MRCP_SET_PARAMS,                "SET-PARAMS" }, 
+    { SIP_METHOD_MRCP_GET_PARAMS,                "GET-PARAMS" }, 
+    { SIP_METHOD_MRCP_SPEAK,                     "SPEAK" }, 
+    { SIP_METHOD_MRCP_STOP,                      "STOP" },
+    { SIP_METHOD_MRCP_PAUSE,                     "PAUSE" },
+    { SIP_METHOD_MRCP_RESUME,                    "RESUME" },
+    { SIP_METHOD_MRCP_BARGE_IN_OCCURRED,         "BARGE-IN-OCCURRED" },
+    { SIP_METHOD_MRCP_CONTROL,                   "CONTROL" },
+    { SIP_METHOD_MRCP_DEFINE_LEXICON,            "DEFINE-LEXICON" },
+    { SIP_METHOD_MRCP_DEFINE_GRAMMAR,            "DEFINE-GRAMMAR" },
+    { SIP_METHOD_MRCP_RECOGNIZE,                 "RECOGNIZE" },
+    { SIP_METHOD_MRCP_INTERPRET,                 "INTERPRET" },
+    { SIP_METHOD_MRCP_GET_RESULT,                "GET-RESULT" },
+    { SIP_METHOD_MRCP_START_INPUT_TIMERS,        "START-INPUT-TIMERS" },
+    { SIP_METHOD_MRCP_START_PHRASE_ENROLLMENT,   "START-PHRASE-ENROLLMENT" },
+    { SIP_METHOD_MRCP_ENROLLMENT_ROLLBACK,       "ENROLLMENT-ROLLBACK" },
+    { SIP_METHOD_MRCP_END_PHRASE_ENROLLMENT,     "END_PHRASE-ENROLLMENT" },
+    { SIP_METHOD_MRCP_MODIFY_PHRASE,             "MODIFY-PHRASE" },
+    { SIP_METHOD_MRCP_DELETE_PHRASE,             "DELETE-PHRASE" },
+    { SIP_METHOD_MRCP_RECORD,                    "RECORD" },
+    { SIP_METHOD_MRCP_START_SESSION,             "START-SESSION" },
+    { SIP_METHOD_MRCP_END_SESSION,               "END-SESSION" },
+    { SIP_METHOD_MRCP_QUERY_VOICEPRINT,          "QUERY-VOICEPRINT" },
+    { SIP_METHOD_MRCP_DELETE_VOICEPRINT,         "DELETE-VOICEPRINT" },
+    { SIP_METHOD_MRCP_VERIFY,                    "VERIFY" },
+    { SIP_METHOD_MRCP_VERIFY_FROM_BUFFER,        "VERIFY-FROM-BUFFER" },
+    { SIP_METHOD_MRCP_VERIFY_ROLLBACK,           "VERIFY-ROLLBACK" },
+    { SIP_METHOD_MRCP_CLEAR_BUFFER,              "CLEAR-BUFFER" },
+    { SIP_METHOD_MRCP_GET_INTERMEDIATE_RESULT,   "INTERMEDIATE-RESULT" },
+
     { 100, "100 Trying" },
     { 180, "180 Ringing" },
     { 181, "181 Call is Being Forwarded" },
@@ -176,6 +207,10 @@ sip_init(int limit, int only_calls, int no_incomplete)
     match_flags = REG_EXTENDED | REG_ICASE | REG_NEWLINE;
     regcomp(&calls.reg_method, "^([a-zA-Z]+) [a-zA-Z]+:.* SIP/2.0[ ]*\r", match_flags & ~REG_NEWLINE);
     regcomp(&calls.reg_callid, "^(Call-ID|i):[ ]*([^ ]+)[ ]*\r$", match_flags);
+
+    regcomp(&calls.reg_mrcp_req, "^MRCP/2.0[ ]+[0-9]+[ ]+([A-Z-]+)[ ]+([0-9]+)[ ]*\r$", match_flags);
+    regcomp(&calls.reg_mrcp_res, "^MRCP/2.0[ ]+[0-9]+[ ]+([0-9]+)[ ]+([0-9]{3})[ ]+([A-Z-]+)[ ]*\r$", match_flags);
+    regcomp(&calls.reg_mrcp_evt, "^MRCP/2.0[ ]+[0-9]+[ ]+([A-Z-]+)[ ]+([0-9]+)[ ]+([A-Z-]+)[ ]*\r$", match_flags);
     regcomp(&calls.reg_mrcp_channelid, "^(Channel-Identifier):[ ]*([^\r]+)[ ]*\r$", match_flags);
 
     setting = setting_get_value(SETTING_SIP_HEADER_X_CID);
@@ -236,6 +271,9 @@ sip_deinit()
     regfree(&calls.reg_body);
     regfree(&calls.reg_reason);
     regfree(&calls.reg_warning);
+    regfree(&calls.reg_mrcp_req);
+    regfree(&calls.reg_mrcp_res);
+    regfree(&calls.reg_mrcp_evt);
     regfree(&calls.reg_mrcp_channelid);
 }
 
@@ -386,8 +424,12 @@ sip_check_packet(packet_t *packet)
     // There is no need to parse all payload at this point
     // If no response or request code is found, this is not a SIP message
     if(channelid[0]) {
-       msg->reqresp = SIP_METHOD_MRCP;
-       msg->cseq = 123456;
+        if(!sip_get_msg_reqresp_for_mrcp(msg, payload)) {
+            printf("bad bad\n");
+            exit(1);
+            msg_destroy(msg);
+            return NULL;
+        }
     } else if (!sip_get_msg_reqresp(msg, payload)) {
         // Deallocate message memory
         msg_destroy(msg);
@@ -634,6 +676,64 @@ sip_get_msg_reqresp(sip_msg_t *msg, const u_char *payload)
     return msg->reqresp;
 }
 
+int
+sip_get_msg_reqresp_for_mrcp(sip_msg_t *msg, const u_char *payload)
+{
+    regmatch_t pmatch[3];
+    char resp_str[SIP_ATTR_MAXLEN];
+    char reqresp[SIP_ATTR_MAXLEN];
+    char cseq[11];
+    const char *resp_def;
+
+    // Initialize variables
+    memset(pmatch, 0, sizeof(pmatch));
+    memset(resp_str, 0, sizeof(resp_str));
+    memset(reqresp, 0, sizeof(reqresp));
+
+    // If not already parsed
+    if (!msg->reqresp) {
+
+        // Method & CSeq
+        if (regexec(&calls.reg_mrcp_req, (const char *)payload, 3, pmatch, 0) == 0) {
+            if ((int)(pmatch[1].rm_eo - pmatch[1].rm_so) >= SIP_ATTR_MAXLEN) {
+                strncpy(reqresp, "<malformed>", 11);
+            } else {
+                sprintf(reqresp, "%.*s", (int) (pmatch[1].rm_eo - pmatch[1].rm_so), payload + pmatch[1].rm_so);
+            }
+
+            sprintf(cseq, "%.*s", (int)(pmatch[2].rm_eo - pmatch[2].rm_so), payload + pmatch[2].rm_so);
+            msg->cseq = atoi(cseq);
+
+            msg->reqresp = sip_method_from_str(reqresp);
+        } else if (regexec(&calls.reg_mrcp_res, (const char *)payload, 4, pmatch, 0) == 0) {
+            sprintf(cseq, "%.*s", (int)(pmatch[1].rm_eo - pmatch[1].rm_so), payload + pmatch[1].rm_so);
+            msg->cseq = atoi(cseq);
+
+            if (((int)(pmatch[2].rm_eo - pmatch[2].rm_so) >= SIP_ATTR_MAXLEN) 
+            ||  ((int)(pmatch[3].rm_eo - pmatch[3].rm_so) >= SIP_ATTR_MAXLEN)) {
+                strncpy(resp_str, "<malformed>", 11);
+            } else {
+                sprintf(resp_str, "%.*s %.*s", 
+                    (int) (pmatch[2].rm_eo - pmatch[2].rm_so), payload + pmatch[2].rm_so,
+                    (int) (pmatch[3].rm_eo - pmatch[3].rm_so), payload + pmatch[3].rm_so);
+            }
+            msg->resp_str = strdup(resp_str);
+            msg->reqresp = 1000; // force to be a response
+        } else if (regexec(&calls.reg_mrcp_evt, (const char *)payload, 4, pmatch, 0) == 0) {
+            if ((int)(pmatch[1].rm_eo - pmatch[1].rm_so) >= SIP_ATTR_MAXLEN) {
+                strncpy(resp_str, "<malformed>", 11);
+            } else {
+                sprintf(resp_str, "%.*s", (int) (pmatch[1].rm_eo - pmatch[1].rm_so), payload + pmatch[1].rm_so);
+            }
+            msg->resp_str = strdup(resp_str);
+            msg->reqresp = 1000; // force to be a response
+
+            sprintf(cseq, "%.*s", (int)(pmatch[2].rm_eo - pmatch[2].rm_so), payload + pmatch[2].rm_so);
+            msg->cseq = atoi(cseq);
+        }
+    }
+    return msg->reqresp;
+}
 const char *
 sip_get_msg_reqresp_str(sip_msg_t *msg)
 {
@@ -657,8 +757,6 @@ sip_parse_msg(sip_msg_t *msg)
 int
 sip_parse_msg_payload(sip_msg_t *msg, const u_char *payload)
 {
-    if(msg->reqresp == SIP_METHOD_MRCP) return 0;
-
     regmatch_t pmatch[4];
 
     // From

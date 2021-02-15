@@ -4,5 +4,13 @@
 This is an attempt to implement support for MRCP following 
   https://github.com/irontec/sngrep/issues/254
 
+I did the necessary changes to process MRCP packets and save them in an RTP stream.
+(commit 569773b1c1cce5bb3cdd30d98e142c8e5678e392)
+What is missing at this point is the update of the UI.
+But the app works normally at this point and shows rtp streams properly (so no change in behavior. But I added some strdup and didn't add the necessary calls to 'free' yet).
 
+
+However I when I was working on the ui part, I realized MRCP should not be handled as and RTP stream as all messages would be bundled in a single arrow.
+Instead I want each MRCP message to be visible as a SIP message and be able to click on them and show the full payload.
+So I'm abandoning this approach will try another one.
 

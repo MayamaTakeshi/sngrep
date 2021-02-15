@@ -44,6 +44,8 @@
 
 #define MAX_SIP_PAYLOAD 10240
 
+#define MRCP_CHANNEL_ID_LENGTH 64
+
 //! Shorter declaration of sip_call_list structure
 typedef struct sip_call_list sip_call_list_t;
 //! Shorter declaration of sip codes structure
@@ -70,6 +72,8 @@ enum sip_methods {
     SIP_METHOD_BYE,
     SIP_METHOD_ACK,
     SIP_METHOD_PRACK,
+
+    SIP_METHOD_MRCP,
 };
 
 //! Return values for sip_validate_packet
@@ -130,6 +134,9 @@ struct sip_call_list {
     //! Call-Ids hash table
     htable_t *callids;
 
+    //! MRCP channelids hash table
+    htable_t *mrcp_channelids;
+
     // Max call limit
     int limit;
     //! Only store dialogs starting with INVITE
@@ -161,6 +168,8 @@ struct sip_call_list {
     regex_t reg_body;
     regex_t reg_reason;
     regex_t reg_warning;
+
+    regex_t reg_mrcp_channelid;
 };
 
 /**
@@ -186,9 +195,9 @@ sip_deinit();
  *
  * @param payload SIP message payload
  * @param callid Character array to store callid
- * @return callid parsed from Call-ID header
+ * @return 1 on success
  */
-char *
+int
 sip_get_callid(const char* payload, char *callid);
 
 /**
@@ -318,6 +327,15 @@ sip_find_by_index(int index);
  */
 sip_call_t *
 sip_find_by_callid(const char *callid);
+
+/**
+ * @brief Find a call structure in calls linked list given an MRCP channel-identifier
+ *
+ * @param channelid
+ * @return pointer to the sip_call structure found or NULL
+ */
+sip_call_t *
+sip_find_by_mrcp_channelid(const char *channelid);
 
 
 /**

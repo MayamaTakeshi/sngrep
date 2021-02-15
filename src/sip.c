@@ -887,8 +887,10 @@ sip_parse_msg_media(sip_msg_t *msg, const u_char *payload)
 
         // Check if we have attribute channel-identifier
         if(sscanf(line, "a=channel:%" STRINGIFY(MRCP_CHANNEL_ID_LENGTH) "s", channelid) == 1) {
-            if(strcmp(media_type, "application") == 0) { 
-                htable_insert(calls.mrcp_channelids, strdup(channelid), strdup(call->callid));
+            if(!strcmp(media_type, "application")) { 
+                char *dup = strdup(channelid);
+                vector_append(call->mrcp_channelids, dup);
+                htable_insert(calls.mrcp_channelids, dup, call->callid);
             }
         }
     }
@@ -1156,3 +1158,8 @@ sip_list_sorter(vector_t *vector, void *item)
     // Put this item at the begining of the vector
     vector_insert(vector, item, 0);
 }
+
+void sip_remove_mrcp_channelid(char *channelid) {
+    htable_remove(calls.mrcp_channelids, channelid);
+}
+

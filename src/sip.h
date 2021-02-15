@@ -555,4 +555,6 @@ sip_sort_list();
 void
 sip_list_sorter(vector_t *vector, void *item);
 
+void sip_remove_mrcp_channelid(char *channelid);
+
 #endif

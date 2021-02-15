@@ -866,7 +866,7 @@ sip_calls_clear_soft()
                 {
                         if(stream->type == PACKET_MRCP) {
                                 if(stream->mrcpinfo.channelid[0]) {
-                                        htable_insert(calls.mrcp_channelids, stream->mrcpinfo.channelid, call->callid);
+                                        htable_insert(calls.mrcp_channelids, strdup(stream->mrcpinfo.channelid), strdup(call->callid));
                                 } 
                         }
                 }

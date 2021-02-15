@@ -680,15 +680,13 @@ sip_parse_msg_media(sip_msg_t *msg, const u_char *payload)
         if(stream->type == PACKET_MRCP) { \
             if (!sip_find_mrcp_stream(call, channelid)) { \
               call_add_stream(call, stream); \
-        } else { \
-            if (!rtp_find_call_stream(call, src, stream->dst)) { \
-              call_add_stream(call, stream); \
             } \
-        } \
-      } else { \
+        } else if (!rtp_find_call_stream(call, src, stream->dst)) { \
+              call_add_stream(call, stream); \
+        } else { \
           sng_free(stream); \
           stream = NULL; \
-      } \
+        } \
     }
 
     address_t dst, src = { };

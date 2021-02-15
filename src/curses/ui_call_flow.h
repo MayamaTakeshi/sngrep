@@ -74,6 +74,7 @@ enum call_flow_arrow_type {
     CF_ARROW_SIP,
     CF_ARROW_RTP,
     CF_ARROW_RTCP,
+    CF_ARROW_MRCP,
 };
 
 /**

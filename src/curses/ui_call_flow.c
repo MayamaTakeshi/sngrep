@@ -353,6 +353,8 @@ call_flow_draw_arrows(ui_t *ui)
     // Create pending RTP arrows
     rtp_stream_t *stream = NULL;
     while ((stream = call_group_get_next_stream(info->group, stream))) {
+        if(stream->type == PACKET_MRCP) continue;
+
         if (!call_flow_arrow_find(ui, stream)) {
             arrow = call_flow_arrow_create(ui, stream, CF_ARROW_RTP);
             vector_append(info->arrows, arrow);

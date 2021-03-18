@@ -425,8 +425,6 @@ sip_check_packet(packet_t *packet)
     // If no response or request code is found, this is not a SIP message
     if(channelid[0]) {
         if(!sip_get_msg_reqresp_for_mrcp(msg, payload)) {
-            printf("bad bad\n");
-            exit(1);
             msg_destroy(msg);
             return NULL;
         }

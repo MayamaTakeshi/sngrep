@@ -64,12 +64,12 @@ telephone_event_parse(char *buf, size_t buf_len, const u_char *payload, uint32_t
 
     if(evt < 10) {
         c = '0' + evt;
-    } else if(evt < 14) {
-        c = 'A' + evt;
-    } else if(evt == 14) {
-        c = '*';
+    } else if(evt == 10) {
+        c = 0x2a;
+    } else if(evt == 11) {
+        c = 0x23;
     } else {
-        c = '#';
+        c = 'A' - 12 + evt;
     }
    
     if(*end) {

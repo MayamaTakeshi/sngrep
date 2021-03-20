@@ -35,6 +35,7 @@
 #include "rtp.h"
 #include "sip.h"
 #include "vector.h"
+#include "setting.h"
 
 /**
  * @brief Known RTP encodings
@@ -95,6 +96,13 @@ void
 stream_set_format(rtp_stream_t *stream, uint32_t format)
 {
     stream->rtpinfo.fmtcode = format;
+
+    if(setting_enabled(SETTING_TELEPHONE_EVENT)) {
+        const char *fmt = stream_get_format(stream);
+        if(fmt && !strncmp(fmt, "telephone-event", 15)) {
+            stream->telephone_event = 1;
+        }
+    }
 }
 
 void

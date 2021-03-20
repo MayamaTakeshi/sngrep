@@ -832,7 +832,7 @@ capture_packet_parse(packet_t *packet)
             // We have an RTP packet!
             packet_set_type(packet, PACKET_RTP);
             // Store this pacekt if capture rtp is enabled
-            if (capture_cfg.rtp_capture) {
+            if (capture_cfg.rtp_capture || stream->telephone_event) {
                 call_add_rtp_packet(stream_get_call(stream), packet);
                 return 0;
             }

@@ -74,6 +74,7 @@ enum call_flow_arrow_type {
     CF_ARROW_SIP,
     CF_ARROW_RTP,
     CF_ARROW_RTCP,
+    CF_ARROW_EVENT,
 };
 
 /**
@@ -101,6 +102,8 @@ struct call_flow_arrow {
     int height;
     //! Line of flow window this line starts
     int line;
+    //! stream related to this arrow
+    void *stream;
     //! Arrow direction
     enum call_flow_arrow_dir dir;
     //! Source column for this arrow
@@ -268,6 +271,22 @@ int
 call_flow_draw_arrow(ui_t *ui, call_flow_arrow_t *arrow, int line);
 
 /**
+ * @brief Draw the event arrow in the given line
+ *
+ * Draw the given event arrow in the given line.
+ * This function will calculate origin and destination coordinates
+ * base on message information. Each message use multiple lines
+ * depending on the display mode of call flow
+ *
+ * @param ui UI structure pointer
+ * @param arrow Call flow arrow with message to be drawn
+ * @param cline Window line to draw the message
+ * @return the number of screen lines this arrow uses on screen
+ */
+int
+call_flow_draw_event(ui_t *ui, call_flow_arrow_t *arrow, int cline);
+
+/**
  * @brief Draw the message arrow in the given line
  *
  * Draw the given message arrow in the given line.
@@ -364,6 +383,19 @@ call_flow_arrow_message(const call_flow_arrow_t *arrow);
  */
 int
 call_flow_draw_raw(ui_t *ui, sip_msg_t *msg);
+
+/**
+ * @brief Draw raw panel with RTC4733 data
+ *
+ * Draw the given packet data into the raw window.
+ *
+ * @param ui UI structure pointer
+ * @param packet RTC4733 packet
+ * @return 0 in all cases
+ */
+int
+call_flow_draw_raw_event(ui_t *ui, packet_t *packet);
+
 
 /**
  * @brief Draw raw panel with RTCP data

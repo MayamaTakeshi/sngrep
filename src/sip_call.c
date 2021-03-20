@@ -47,7 +47,7 @@ call_create(char *callid, char *xcallid)
     vector_set_destroyer(call->msgs, msg_destroyer);
 
     // Create an empty vector to store rtp packets
-    if (setting_enabled(SETTING_CAPTURE_RTP)) {
+    if (setting_enabled(SETTING_CAPTURE_RTP) || setting_enabled(SETTING_TELEPHONE_EVENT)) {
         call->rtp_packets = vector_create(0, 40);
         vector_set_destroyer(call->rtp_packets, packet_destroyer);
     }

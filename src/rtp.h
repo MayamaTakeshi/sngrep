@@ -113,6 +113,8 @@ struct rtp_stream {
     struct timeval time;
     //! Unix timestamp of last received packet
     int lasttm;
+    //! if it is for telephone-event
+    int telephone_event;
 
     // Stream information (depending on type)
     union {

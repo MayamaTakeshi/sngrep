@@ -38,6 +38,7 @@
 #include "util.h"
 #include "vector.h"
 #include "option.h"
+#include "telephone_event.h"
 
 #define METHOD_MAXLEN 80
 
@@ -352,10 +353,28 @@ call_flow_draw_arrows(ui_t *ui)
     }
     // Create pending RTP arrows
     rtp_stream_t *stream = NULL;
+
     while ((stream = call_group_get_next_stream(info->group, stream))) {
-        if (!call_flow_arrow_find(ui, stream)) {
-            arrow = call_flow_arrow_create(ui, stream, CF_ARROW_RTP);
-            vector_append(info->arrows, arrow);
+        if(stream->telephone_event) {
+            struct sip_call *call= stream_get_call(stream);
+            vector_iter_t it = vector_iterator(call->rtp_packets);
+            packet_t *packet;
+            while (packet = vector_iterator_next(&it)) {
+                if(RTP_PAYLOAD_TYPE(*(packet->payload+1)) == stream->rtpinfo.fmtcode) {
+                    if (addressport_equals(stream->src, packet->src) && addressport_equals(stream->dst, packet->dst)) {
+                        if (!call_flow_arrow_find(ui, packet)) {
+                            arrow = call_flow_arrow_create(ui, packet, CF_ARROW_EVENT);
+                            arrow->stream = stream;
+                            vector_append(info->arrows, arrow);
+                        }
+                    }
+                }
+            }
+        } else {
+            if (!call_flow_arrow_find(ui, stream)) {
+                arrow = call_flow_arrow_create(ui, stream, CF_ARROW_RTP);
+                vector_append(info->arrows, arrow);
+            }
         }
     }
 
@@ -409,6 +428,8 @@ call_flow_draw_preview(ui_t *ui)
     if ((arrow = vector_item(info->darrows, info->cur_arrow))) {
         if (arrow->type == CF_ARROW_SIP) {
             call_flow_draw_raw(ui, arrow->item);
+        } else if (arrow->type == CF_ARROW_EVENT) {
+            call_flow_draw_raw_event(ui, arrow->item);
         } else {
             call_flow_draw_raw_rtcp(ui, arrow->item);
         }
@@ -674,11 +695,19 @@ call_flow_draw_rtp_stream(ui_t *ui, call_flow_arrow_t *arrow, int cline)
     WINDOW *win;
     char text[50], time[20];
     int height, width;
-    rtp_stream_t *stream = arrow->item;
+    rtp_stream_t *stream;
     sip_msg_t *msg;
     sip_call_t *call;
     call_flow_arrow_t *msgarrow;
     address_t addr;
+    packet_t *packet = NULL;
+
+    if(!arrow->stream) {
+        stream = arrow->item;
+    } else {
+        stream = arrow->stream;
+        packet = arrow->item;
+    }
 
     // Get panel information
     info = call_flow_info(ui);
@@ -697,7 +726,14 @@ call_flow_draw_rtp_stream(ui_t *ui, call_flow_arrow_t *arrow, int cline)
         return 0;
 
     // Get arrow text
-    sprintf(text, "RTP (%s) %d", stream_get_format(stream), stream_get_count(stream));
+    if(packet) {
+        bool end;
+        uint8_t volume;
+        uint16_t duration;
+        telephone_event_parse(text, sizeof(text), packet->payload, packet->payload_len, &end, &volume, &duration);
+    } else {
+        sprintf(text, "RTP (%s) %d", stream_get_format(stream), stream_get_count(stream));
+    }
 
     // Get message data
     call = stream->media->msg->call;
@@ -813,7 +849,10 @@ call_flow_draw_rtp_stream(ui_t *ui, call_flow_arrow_t *arrow, int cline)
     }
 
     // Check if displayed stream is active
-    int active = stream_is_active(stream);
+    int active = 0;
+    if(!packet) {
+        active = stream_is_active(stream);
+    }
 
     // Clear the line
     mvwprintw(win, cline, startpos + 2, "%*s", distance, "");
@@ -861,7 +900,11 @@ call_flow_draw_rtp_stream(ui_t *ui, call_flow_arrow_t *arrow, int cline)
 
     // Print timestamp
     if (info->arrowtime) {
-        timeval_to_time(stream->time, time);
+        if(packet) {
+            timeval_to_time(packet_time(packet), time);
+        } else {
+            timeval_to_time(stream->time, time);
+        }
         if (arrow == vector_item(info->darrows, info->cur_arrow)) {
             wattron(win, A_BOLD);
             mvwprintw(win, cline, 2, "%s", time);
@@ -907,7 +950,7 @@ call_flow_arrow_height(ui_t *ui, const call_flow_arrow_t *arrow)
             return 2;
         if (setting_has_value(SETTING_CF_SDP_INFO, "full"))
             return msg_media_count(arrow->item) + 2;
-    } else if (arrow->type == CF_ARROW_RTP || arrow->type == CF_ARROW_RTCP) {
+    } else if (arrow->type == CF_ARROW_RTP || arrow->type == CF_ARROW_RTCP || arrow->type == CF_ARROW_EVENT) {
         if (setting_has_value(SETTING_CF_SDP_INFO, "compressed"))
             return 1;
         if (setting_disabled(SETTING_CF_MEDIA))
@@ -951,6 +994,11 @@ call_flow_arrow_message(const  call_flow_arrow_t *arrow)
 
     if (arrow->type == CF_ARROW_RTP) {
         rtp_stream_t *stream = arrow->item;
+        return stream->media->msg;
+    }
+
+    if (arrow->type == CF_ARROW_EVENT) {
+        rtp_stream_t *stream = arrow->stream;
         return stream->media->msg;
     }
 
@@ -1024,6 +1072,78 @@ call_flow_draw_raw(ui_t *ui, sip_msg_t *msg)
 
     // Print msg payload
     draw_message(info->raw_win, msg);
+
+    // Copy the raw_win contents into the panel
+    copywin(raw_win, ui->win, 0, 0, 1, ui->width - raw_width - 1, raw_height, ui->width - 2, 0);
+
+    return 0;
+}
+
+
+int
+call_flow_draw_raw_event(ui_t *ui, packet_t *packet)
+{
+    char text[50];
+    call_flow_info_t *info;
+    WINDOW *raw_win;
+    int raw_width, raw_height;
+    int min_raw_width, fixed_raw_width;
+
+    bool end;
+    uint8_t volume;
+    uint16_t duration;
+
+    if(!telephone_event_parse(text, sizeof(text), packet->payload, packet->payload_len, &end, &volume, &duration)) return 0;
+
+    // Get panel information
+    if (!(info = call_flow_info(ui)))
+        return 1;
+
+    // Get min raw width
+    min_raw_width = setting_get_intvalue(SETTING_CF_RAWMINWIDTH);
+    fixed_raw_width = setting_get_intvalue(SETTING_CF_RAWFIXEDWIDTH);
+
+    // Calculate the raw data width (width - used columns for flow - vertical lines)
+    raw_width = ui->width - (30 * vector_count(info->columns)) - 2;
+    // We can define a mininum size for rawminwidth
+    if (raw_width < min_raw_width) {
+        raw_width = min_raw_width;
+    }
+    // We can configure an exact raw size
+    if (fixed_raw_width > 0) {
+        raw_width = fixed_raw_width;
+    }
+
+    // Height of raw window is always available size minus 6 lines for header/footer
+    raw_height = ui->height - 3;
+
+    // If we already have a raw window
+    raw_win = info->raw_win;
+    if (raw_win) {
+        // Check it has the correct size
+        if (getmaxx(raw_win) != raw_width) {
+            // We need a new raw window
+            delwin(raw_win);
+            info->raw_win = raw_win = newwin(raw_height, raw_width, 0, 0);
+        } else {
+            // We have a valid raw win, clear its content
+            werase(raw_win);
+        }
+    } else {
+        // Create the raw window of required size
+        info->raw_win = raw_win = newwin(raw_height, raw_width, 0, 0);
+    }
+
+    // Draw raw box lines
+    wattron(ui->win, COLOR_PAIR(CP_BLUE_ON_DEF));
+    mvwvline(ui->win, 1, ui->width - raw_width - 2, ACS_VLINE, ui->height - 2);
+    wattroff(ui->win, COLOR_PAIR(CP_BLUE_ON_DEF));
+
+    mvwprintw(raw_win, 0, 0, "============ RFC4733 (telephone-event) Information ============");
+    mvwprintw(raw_win, 2, 0, "Event: %s", text);
+    mvwprintw(raw_win, 3, 0, "End: %s", end ? "yes" : "no");
+    mvwprintw(raw_win, 4, 0, "Volume: %d", volume);
+    mvwprintw(raw_win, 5, 0, "Duration: %d", duration);
 
     // Copy the raw_win contents into the panel
     copywin(raw_win, ui->win, 0, 0, 1, ui->width - raw_width - 1, raw_height, ui->width - 2, 0);
@@ -1534,6 +1654,7 @@ call_flow_arrow_time(call_flow_arrow_t *arrow)
     struct timeval ts = { 0 };
     sip_msg_t *msg;
     rtp_stream_t *stream;
+    packet_t *packet;
 
     if (!arrow)
         return ts;
@@ -1544,7 +1665,11 @@ call_flow_arrow_time(call_flow_arrow_t *arrow)
     } else if (arrow->type == CF_ARROW_RTP) {
         stream = (rtp_stream_t *) arrow->item;
         ts = stream->time;
+    } else if (arrow->type == CF_ARROW_EVENT) {
+        packet = (packet_t *) arrow->item;
+        ts = packet_time(packet);
     }
+
     return ts;
 
 }
@@ -1586,7 +1711,7 @@ call_flow_arrow_filter(void *item)
         return 1;
 
     // RTP arrows are only displayed when requested
-    if (arrow->type == CF_ARROW_RTP) {
+    if (arrow->type == CF_ARROW_RTP || arrow->type == CF_ARROW_EVENT) {
         // Display all streams
         if (setting_enabled(SETTING_CF_MEDIA))
             return 1;

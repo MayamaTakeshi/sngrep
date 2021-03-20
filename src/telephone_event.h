@@ -37,6 +37,18 @@
 #include <stdint.h>
 #include <arpa/inet.h>
 
+/**
+ * @brief Extracts RFC4733 event code
+ *
+ * @param payload
+ * @param payload_len
+ * @param end : pointer to receive value of end
+ * @return event code or -1 on error
+ */
+
+int
+telephone_event_get_code(const u_char *payload, uint32_t payload_len, bool *end);
+
 
 /**
  * @brief Parse RFC4733 RTP packet payload

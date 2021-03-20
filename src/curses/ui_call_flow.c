@@ -240,7 +240,8 @@ call_flow_draw_footer(ui_t *ui)
         key_action_key_str(ACTION_COMPRESS), "Compressed",
         key_action_key_str(ACTION_SHOW_RAW), "Raw",
         key_action_key_str(ACTION_CYCLE_COLOR), "Colour by",
-        key_action_key_str(ACTION_INCREASE_RAW), "Increase Raw"
+        key_action_key_str(ACTION_INCREASE_RAW), "Increase Raw",
+        key_action_key_str(ACTION_TOGGLE_TELEVT_MODE), "TelEvt Mode",
     };
 
     ui_draw_bindings(ui, keybindings, 22);
@@ -359,13 +360,32 @@ call_flow_draw_arrows(ui_t *ui)
             struct sip_call *call= stream_get_call(stream);
             vector_iter_t it = vector_iterator(call->rtp_packets);
             packet_t *packet;
+            bool evt_ongoing = false;
             while (packet = vector_iterator_next(&it)) {
                 if(RTP_PAYLOAD_TYPE(*(packet->payload+1)) == stream->rtpinfo.fmtcode) {
                     if (addressport_equals(stream->src, packet->src) && addressport_equals(stream->dst, packet->dst)) {
-                        if (!call_flow_arrow_find(ui, packet)) {
-                            arrow = call_flow_arrow_create(ui, packet, CF_ARROW_EVENT);
-                            arrow->stream = stream;
-                            vector_append(info->arrows, arrow);
+                        if(setting_disabled(SETTING_CF_TELEVT_MODE)) {
+                            bool end;
+                            int evt_code = telephone_event_get_code(packet->payload, packet->payload_len, &end);
+
+                            if(end) {
+                                if(evt_ongoing) {
+                                    if (!call_flow_arrow_find(ui, packet)) {
+                                        arrow = call_flow_arrow_create(ui, packet, CF_ARROW_EVENT);
+                                        arrow->stream = stream;
+                                        vector_append(info->arrows, arrow);
+                                    }
+                                    evt_ongoing = false;
+                                }
+                                continue;
+                            }
+                            evt_ongoing = true;
+                        } else {
+                            if (!call_flow_arrow_find(ui, packet)) {
+                                arrow = call_flow_arrow_create(ui, packet, CF_ARROW_EVENT);
+                                arrow->stream = stream;
+                                vector_append(info->arrows, arrow);
+                            }
                         }
                     }
                 }
@@ -1373,7 +1393,11 @@ call_flow_handle_key(ui_t *ui, int key)
             case ACTION_CLEAR_CALLS_SOFT:
                 // Propagate the key to the previous panel
                 return KEY_PROPAGATED;
-
+            case ACTION_TOGGLE_TELEVT_MODE:
+                setting_toggle(SETTING_CF_TELEVT_MODE);
+                // Force reload arrows
+                call_flow_set_group(info->group);
+                break;
             default:
                 // Parse next action
                 continue;
@@ -1443,6 +1467,7 @@ call_flow_help(ui_t *ui)
     mvwprintw(help_win, 22, 2, "t           Toggle raw preview display");
     mvwprintw(help_win, 23, 2, "T           Restore raw preview size");
     mvwprintw(help_win, 24, 2, "D           Only show SDP messages");
+    mvwprintw(help_win, 25, 2, "Z           Toogle full packets or coalesced telephone-events");
 
     // Press any key to close
     wgetch(help_win);

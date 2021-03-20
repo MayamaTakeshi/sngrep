@@ -30,6 +30,26 @@
 #include "telephone_event.h"
 #include <stdio.h>
 
+int
+telephone_event_get_code(const u_char *payload, uint32_t payload_len, bool *end) {
+    if(payload_len < 12) return -1;
+
+    u_char v = payload[0] >> 6;
+    if(v != 2) return -1;
+
+    u_char cc = 0x0F & payload[0];
+
+    int offset = 12 + (cc * 4);
+
+    if(payload_len < offset + 4) return -1;
+
+    int evt = payload[offset];
+
+    *end = payload[offset+1] >> 7;
+
+    return evt;
+}
+
 bool
 telephone_event_parse(char *buf, size_t buf_len, const u_char *payload, uint32_t payload_len, bool *end, uint8_t *volume, uint16_t *duration) {
     if(payload_len < 12) {

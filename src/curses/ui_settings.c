@@ -75,6 +75,7 @@ settings_entry_t entries[] = {
     { CAT_SETTINGS_CALL_FLOW,  FLD_SETTINGS_CF_DELTA,           SETTING_CF_DELTA,           "Show delta time between messages .........." },
     { CAT_SETTINGS_CALL_FLOW,  FLD_SETTINGS_CF_MEDIA,           SETTING_CF_MEDIA,           "Show RTP media streams ...................." },
     { CAT_SETTINGS_CALL_FLOW,  FLD_SETTINGS_CF_SCROLLSTEP,      SETTING_CF_SCROLLSTEP,      "Steps for PgUp/PgDown ....................." },
+    { CAT_SETTINGS_CALL_FLOW,  FLD_SETTINGS_CF_TELEVT_MODE,     SETTING_CF_TELEVT_MODE,     "Show full RFC4733 packets or events only..." },
 #ifdef USE_EEP
     { CAT_SETTINGS_EEP_HOMER,  FLD_SETTINGS_EEP_SEND,           SETTING_EEP_SEND,           "Send all captured SIP packets ............." },
     { CAT_SETTINGS_EEP_HOMER,  FLD_SETTINGS_EEP_SEND_VER,       SETTING_EEP_SEND_VER,       "Send EEP version .........................." },

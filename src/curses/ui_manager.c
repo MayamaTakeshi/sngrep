@@ -455,7 +455,11 @@ draw_message_pos(WINDOW *win, sip_msg_t *msg, int starting)
         if (isascii(payload[i])) {
             mvwaddch(win, line, column++, payload[i]);
         } else {
-            mvwaddch(win, line, column++, *nonascii);
+            int len = 0, j=i;
+            while (payload[i]!='"') len += (payload[i++] & 0xc0) != 0x80;
+            mvwaddnstr(win, line, column, &payload[j], i-j);
+            i--;
+            column += len;
         }
 
         // Stop if we've reached the bottom of the window

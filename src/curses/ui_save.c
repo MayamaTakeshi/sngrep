@@ -102,7 +102,7 @@ save_create(ui_t *ui)
     set_field_back(info->fields[FLD_SAVE_FILE], A_UNDERLINE);
 
     // Disable Save RTP if RTP packets are not being captured
-    if (!setting_enabled(SETTING_CAPTURE_RTP))
+    if (!setting_enabled(SETTING_CAPTURE_RTP) && !setting_enabled(SETTING_TELEPHONE_EVENT))
         field_opts_off(info->fields[FLD_SAVE_PCAP_RTP], O_ACTIVE);
 
     // Create the form and post it
@@ -169,7 +169,7 @@ save_create(ui_t *ui)
 
     // Set default save modes
     info->savemode = (stats.displayed == stats.total) ? SAVE_ALL : SAVE_DISPLAYED;
-    info->saveformat = (setting_enabled(SETTING_CAPTURE_RTP))? SAVE_PCAP_RTP : SAVE_PCAP;
+    info->saveformat = (setting_enabled(SETTING_CAPTURE_RTP) || setting_enabled(SETTING_TELEPHONE_EVENT)) ? SAVE_PCAP_RTP : SAVE_PCAP;
 
 }
 
@@ -237,7 +237,7 @@ save_draw(ui_t *ui)
 
     mvwprintw(ui->win, 4, 60, "     ");
     if (strstr(field_value, ".pcap")) {
-        info->saveformat = (setting_enabled(SETTING_CAPTURE_RTP))? SAVE_PCAP_RTP : SAVE_PCAP;
+        info->saveformat = (setting_enabled(SETTING_CAPTURE_RTP) || setting_enabled(SETTING_TELEPHONE_EVENT)) ? SAVE_PCAP_RTP : SAVE_PCAP;
     } else if (strstr(field_value, ".txt")) {
         info->saveformat = SAVE_TXT;
     } else {
@@ -259,7 +259,7 @@ save_draw(ui_t *ui)
     set_field_buffer(info->fields[FLD_SAVE_TXT], 0, (info->saveformat == SAVE_TXT) ? "*" : " ");
 
     // Show disabled options with makers
-    if (!setting_enabled(SETTING_CAPTURE_RTP))
+    if (!setting_enabled(SETTING_CAPTURE_RTP) && !setting_enabled(SETTING_TELEPHONE_EVENT))
         set_field_buffer(info->fields[FLD_SAVE_PCAP_RTP], 0, "-");
 
     set_current_field(info->form, current_field(info->form));
